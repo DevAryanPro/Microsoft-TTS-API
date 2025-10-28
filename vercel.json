@@ -14,5 +14,10 @@
   ],
   "env": {
     "PYTHONUNBUFFERED": "1"
+  },
+  "functions": {
+    "main.py": {
+      "maxDuration": 60
+    }
   }
 }
