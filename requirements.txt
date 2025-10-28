@@ -1,0 +1,4 @@
+fastapi==0.104.1
+edge-tts==6.1.9
+uvicorn==0.24.0
+python-multipart==0.0.6
