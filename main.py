@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import edge_tts
 from io import BytesIO
@@ -17,339 +16,470 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# List of verified working voices
+VERIFIED_VOICES = [
+    "es-MX-DaliaNeural",
+    "es-MX-JorgeNeural", 
+    "es-ES-ElviraNeural",
+    "es-ES-AlvaroNeural",
+    "es-AR-ElenaNeural",
+    "es-CO-SalomeNeural",
+    "en-US-JennyNeural",
+    "en-US-GuyNeural",
+    "en-GB-LibbyNeural",
+    "en-GB-RyanNeural",
+    "fr-FR-DeniseNeural",
+    "de-DE-KatjaNeural",
+    "it-IT-ElsaNeural",
+    "pt-BR-FranciscaNeural",
+    "ja-JP-NanamiNeural",
+    "ko-KR-SunHiNeural",
+    "zh-CN-XiaoxiaoNeural"
+]
+
 @app.get("/")
 async def root():
-    return JSONResponse(
-        content={
-            "status": True,
-            "status_code": 200,
-            "message": "Microsoft TTS API is running"
-        }
-    )
-
-@app.get("/docs", response_class=HTMLResponse)
-@app.get("/documentation", response_class=HTMLResponse)
-async def documentation():
     html_content = """
 <!DOCTYPE html>
-<html lang="es" data-theme="light">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Microsoft TTS API</title>
+    <title>Microsoft TTS API - Text to Speech Converter</title>
     <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/lucide@latest/dist/umd/lucide.js" />
     <style>
-        * { font-family: 'Geist', sans-serif; }
+        .hero-pattern {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
     </style>
 </head>
 <body class="min-h-screen bg-base-100">
     <!-- Navigation -->
-    <div class="navbar bg-base-200 shadow-lg">
+    <div class="navbar bg-base-100 border-b">
         <div class="navbar-start">
-            <div class="dropdown">
-                <div tabindex="0" role="button" class="btn btn-ghost lg:hidden">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
-                    </svg>
-                </div>
-                <ul tabindex="0" class="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow">
-                    <li><a href="#features">Características</a></li>
-                    <li><a href="#usage">Uso</a></li>
-                    <li><a href="#voices">Voces</a></li>
-                    <li><a href="#examples">Ejemplos</a></li>
-                </ul>
-            </div>
-            <a class="btn btn-ghost text-xl">🎙️ TTS API</a>
+            <a class="btn btn-ghost text-xl">
+                <i data-lucide="volume-2" class="w-6 h-6 mr-2"></i>
+                TTS API
+            </a>
         </div>
         <div class="navbar-center hidden lg:flex">
             <ul class="menu menu-horizontal px-1">
-                <li><a href="#features">Características</a></li>
-                <li><a href="#usage">Uso</a></li>
-                <li><a href="#voices">Voces</a></li>
-                <li><a href="#examples">Ejemplos</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#playground">Playground</a></li>
+                <li><a href="#api">API</a></li>
+                <li><a href="#faq">FAQ</a></li>
             </ul>
         </div>
         <div class="navbar-end">
-            <label class="swap swap-rotate">
-                <input type="checkbox" class="theme-controller" value="dark" />
-                <svg class="swap-off w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
-                </svg>
-                <svg class="swap-on w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"></path>
-                </svg>
-            </label>
+            <a href="#playground" class="btn btn-primary">Try Now</a>
         </div>
     </div>
 
     <!-- Hero Section -->
-    <div class="hero min-h-screen bg-base-200">
-        <div class="hero-content text-center">
-            <div class="max-w-4xl">
-                <h1 class="text-5xl font-bold">🎙️ Microsoft TTS API</h1>
-                <p class="py-6 text-xl">
-                    Convierte texto a audio con 400+ voces neuronales de Microsoft Edge
-                </p>
-                <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                    <a href="#usage" class="btn btn-primary btn-lg">Comenzar</a>
-                    <a href="/api/tts?voice=es-MX-DaliaNeural&text=Hola, esta es una prueba de la API" 
-                       class="btn btn-outline btn-lg" target="_blank">🎵 Probar Ahora</a>
+    <section class="hero-pattern text-white">
+        <div class="hero min-h-96">
+            <div class="hero-content text-center">
+                <div class="max-w-2xl">
+                    <h1 class="text-5xl font-bold mb-6">Microsoft TTS API</h1>
+                    <p class="text-xl mb-8">
+                        Convert text to natural-sounding speech with 400+ neural voices in 30+ languages
+                    </p>
+                    <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                        <a href="#playground" class="btn btn-secondary btn-lg">
+                            <i data-lucide="play" class="w-5 h-5 mr-2"></i>
+                            Try Playground
+                        </a>
+                        <a href="#api" class="btn btn-outline btn-lg text-white border-white">
+                            <i data-lucide="code" class="w-5 h-5 mr-2"></i>
+                            View API Docs
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
     <!-- Features Section -->
-    <div id="features" class="py-20 bg-base-100">
+    <section id="features" class="py-16 bg-base-100">
         <div class="container mx-auto px-4">
-            <h2 class="text-4xl font-bold text-center mb-12">✨ Características</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div class="card bg-base-200 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">💰 Totalmente Gratis</h3>
-                        <p>Sin costos ocultos, sin límites de uso para proyectos personales</p>
+            <h2 class="text-4xl font-bold text-center mb-4">Why Choose Our TTS API</h2>
+            <p class="text-center text-lg text-base-content/70 mb-12 max-w-2xl mx-auto">
+                Professional text-to-speech solution with enterprise-grade quality and reliability
+            </p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div class="card bg-base-200">
+                    <div class="card-body items-center text-center">
+                        <i data-lucide="zap" class="w-12 h-12 text-primary mb-4"></i>
+                        <h3 class="card-title mb-2">Fast & Reliable</h3>
+                        <p class="text-base-content/70">Instant text-to-speech conversion with 99.9% uptime guarantee</p>
                     </div>
                 </div>
-                <div class="card bg-base-200 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🔐 Sin Autenticación</h3>
-                        <p>Usa la API directamente sin necesidad de API keys o registro</p>
+                
+                <div class="card bg-base-200">
+                    <div class="card-body items-center text-center">
+                        <i data-lucide="globe" class="w-12 h-12 text-primary mb-4"></i>
+                        <h3 class="card-title mb-2">Multiple Languages</h3>
+                        <p class="text-base-content/70">400+ neural voices across 30+ languages and dialects</p>
                     </div>
                 </div>
-                <div class="card bg-base-200 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🎯 Alta Calidad</h3>
-                        <p>Audio MP3 a 24kHz con voces neuronales de última generación</p>
+                
+                <div class="card bg-base-200">
+                    <div class="card-body items-center text-center">
+                        <i data-lucide="shield" class="w-12 h-12 text-primary mb-4"></i>
+                        <h3 class="card-title mb-2">High Quality</h3>
+                        <p class="text-base-content/70">Studio-quality 24kHz MP3 audio with natural pronunciation</p>
                     </div>
                 </div>
-                <div class="card bg-base-200 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🌎 Múltiples Idiomas</h3>
-                        <p>400+ voces en 30+ idiomas diferentes disponibles</p>
+                
+                <div class="card bg-base-200">
+                    <div class="card-body items-center text-center">
+                        <i data-lucide="code" class="w-12 h-12 text-primary mb-4"></i>
+                        <h3 class="card-title mb-2">Easy Integration</h3>
+                        <p class="text-base-content/70">Simple REST API with clear documentation and examples</p>
                     </div>
                 </div>
-                <div class="card bg-base-200 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">⚡ Respuesta Rápida</h3>
-                        <p>Conversión de texto a voz en tiempo real con baja latencia</p>
+                
+                <div class="card bg-base-200">
+                    <div class="card-body items-center text-center">
+                        <i data-lucide="dollar-sign" class="w-12 h-12 text-primary mb-4"></i>
+                        <h3 class="card-title mb-2">Free Forever</h3>
+                        <p class="text-base-content/70">Completely free for personal and commercial use</p>
                     </div>
                 </div>
-                <div class="card bg-base-200 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🔧 Fácil Integración</h3>
-                        <p>API REST simple con parámetros claros y documentación completa</p>
+                
+                <div class="card bg-base-200">
+                    <div class="card-body items-center text-center">
+                        <i data-lucide="cloud" class="w-12 h-12 text-primary mb-4"></i>
+                        <h3 class="card-title mb-2">No Setup</h3>
+                        <p class="text-base-content/70">No API keys, no registration, no credit card required</p>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Usage Section -->
-    <div id="usage" class="py-20 bg-base-200">
+    <!-- Playground Section -->
+    <section id="playground" class="py-16 bg-base-200">
         <div class="container mx-auto px-4">
-            <h2 class="text-4xl font-bold text-center mb-12">🚀 Cómo Usar</h2>
+            <h2 class="text-4xl font-bold text-center mb-4">TTS Playground</h2>
+            <p class="text-center text-lg text-base-content/70 mb-12 max-w-2xl mx-auto">
+                Test the text-to-speech conversion with different voices and languages
+            </p>
             
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <!-- API Endpoint -->
-                <div class="card bg-base-100 shadow-xl">
+            <div class="max-w-4xl mx-auto">
+                <div class="card bg-base-100">
                     <div class="card-body">
-                        <h3 class="card-title">📋 Endpoint Principal</h3>
-                        <div class="mockup-code bg-neutral text-neutral-content">
-                            <pre><code>GET /api/tts?voice=es-MX-DaliaNeural&text=Hola mundo</code></pre>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Parameters -->
-                <div class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🔮 Parámetros</h3>
-                        <div class="space-y-4">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Voice Selection -->
                             <div class="form-control">
                                 <label class="label">
-                                    <span class="label-text font-bold">voice <span class="badge badge-primary">requerido</span></span>
+                                    <span class="label-text font-bold">Select Voice</span>
                                 </label>
-                                <input type="text" class="input input-bordered" value="es-MX-DaliaNeural" readonly>
-                                <label class="label">
-                                    <span class="label-text-alt">Nombre de la voz neural</span>
-                                </label>
+                                <select class="select select-bordered" id="voiceSelect">
+                                    <option value="es-MX-DaliaNeural">es-MX-DaliaNeural 👩 (Spanish - Mexico)</option>
+                                    <option value="es-MX-JorgeNeural">es-MX-JorgeNeural 👨 (Spanish - Mexico)</option>
+                                    <option value="es-ES-ElviraNeural">es-ES-ElviraNeural 👩 (Spanish - Spain)</option>
+                                    <option value="en-US-JennyNeural">en-US-JennyNeural 👩 (English - US)</option>
+                                    <option value="en-US-GuyNeural">en-US-GuyNeural 👨 (English - US)</option>
+                                    <option value="en-GB-LibbyNeural">en-GB-LibbyNeural 👩 (English - UK)</option>
+                                    <option value="fr-FR-DeniseNeural">fr-FR-DeniseNeural 👩 (French)</option>
+                                    <option value="de-DE-KatjaNeural">de-DE-KatjaNeural 👩 (German)</option>
+                                    <option value="it-IT-ElsaNeural">it-IT-ElsaNeural 👩 (Italian)</option>
+                                    <option value="ja-JP-NanamiNeural">ja-JP-NanamiNeural 👩 (Japanese)</option>
+                                </select>
                             </div>
+                            
+                            <!-- Text Input -->
                             <div class="form-control">
                                 <label class="label">
-                                    <span class="label-text font-bold">text <span class="badge badge-primary">requerido</span></span>
+                                    <span class="label-text font-bold">Enter Text</span>
                                 </label>
-                                <input type="text" class="input input-bordered" value="Hola mundo" readonly>
-                                <label class="label">
-                                    <span class="label-text-alt">Texto a convertir</span>
-                                </label>
+                                <input type="text" class="input input-bordered" id="textInput" 
+                                       placeholder="Enter text to convert to speech" value="Hello, welcome to Microsoft TTS API">
                             </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Example URL -->
-            <div class="card bg-primary text-primary-content mt-8">
-                <div class="card-body">
-                    <h3 class="card-title">💡 URL de Ejemplo</h3>
-                    <div class="bg-primary-content text-primary p-4 rounded-lg">
-                        <code class="break-all">https://your-app.vercel.app/api/tts?voice=es-MX-DaliaNeural&text=Buenos días, ¿cómo estás?</code>
-                    </div>
-                    <div class="card-actions justify-end">
-                        <a href="/api/tts?voice=es-MX-DaliaNeural&text=Buenos días, ¿cómo estás?" 
-                           class="btn btn-secondary" target="_blank">Probar Ejemplo</a>
+                        
+                        <!-- Convert Button -->
+                        <div class="form-control mt-6">
+                            <button class="btn btn-primary btn-lg" id="convertBtn">
+                                <i data-lucide="volume-2" class="w-5 h-5 mr-2"></i>
+                                Convert to Speech
+                            </button>
+                        </div>
+                        
+                        <!-- Audio Player -->
+                        <div class="mt-6 hidden" id="audioSection">
+                            <label class="label">
+                                <span class="label-text font-bold">Generated Audio</span>
+                            </label>
+                            <audio controls class="w-full" id="audioPlayer"></audio>
+                            <div class="mt-2 flex gap-2">
+                                <a class="btn btn-outline btn-sm" id="downloadBtn">
+                                    <i data-lucide="download" class="w-4 h-4 mr-1"></i>
+                                    Download MP3
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <!-- Error Message -->
+                        <div class="alert alert-error mt-4 hidden" id="errorAlert">
+                            <i data-lucide="alert-circle" class="w-5 h-5"></i>
+                            <span id="errorMessage"></span>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Voices Section -->
-    <div id="voices" class="py-20 bg-base-100">
+    <!-- API Documentation -->
+    <section id="api" class="py-16 bg-base-100">
         <div class="container mx-auto px-4">
-            <h2 class="text-4xl font-bold text-center mb-12">🎤 Voces Populares</h2>
+            <h2 class="text-4xl font-bold text-center mb-4">API Documentation</h2>
+            <p class="text-center text-lg text-base-content/70 mb-12 max-w-2xl mx-auto">
+                Simple REST API for integrating text-to-speech into your applications
+            </p>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-                <!-- Spanish Voices -->
-                <div class="card bg-base-200 shadow-xl">
+            <div class="max-w-4xl mx-auto space-y-8">
+                <!-- Base URL -->
+                <div class="card bg-base-200">
                     <div class="card-body">
-                        <h3 class="card-title">🇪🇸 Español</h3>
-                        <div class="space-y-2">
-                            <div class="badge badge-outline">es-MX-DaliaNeural 👩</div>
-                            <div class="badge badge-outline">es-MX-JorgeNeural 👨</div>
-                            <div class="badge badge-outline">es-ES-ElviraNeural 👩</div>
-                            <div class="badge badge-outline">es-ES-AlvaroNeural 👨</div>
-                            <div class="badge badge-outline">es-AR-ElenaNeural 👩</div>
-                            <div class="badge badge-outline">es-CO-SalomeNeural 👩</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- English Voices -->
-                <div class="card bg-base-200 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🇺🇸 English</h3>
-                        <div class="space-y-2">
-                            <div class="badge badge-outline">en-US-JennyNeural 👩</div>
-                            <div class="badge badge-outline">en-US-GuyNeural 👨</div>
-                            <div class="badge badge-outline">en-GB-LibbyNeural 👩</div>
-                            <div class="badge badge-outline">en-GB-RyanNeural 👨</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Other Languages -->
-                <div class="card bg-base-200 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🌍 Otros Idiomas</h3>
-                        <div class="space-y-2">
-                            <div class="badge badge-outline">fr-FR-DeniseNeural 👩</div>
-                            <div class="badge badge-outline">de-DE-KatjaNeural 👩</div>
-                            <div class="badge badge-outline">it-IT-ElsaNeural 👩</div>
-                            <div class="badge badge-outline">pt-BR-FranciscaNeural 👩</div>
-                            <div class="badge badge-outline">ja-JP-NanamiNeural 👩</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="text-center">
-                <a href="/api/voices" class="btn btn-primary btn-lg">
-                    Ver todas las 400+ voces disponibles
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <!-- Code Examples -->
-    <div id="examples" class="py-20 bg-base-200">
-        <div class="container mx-auto px-4">
-            <h2 class="text-4xl font-bold text-center mb-12">💻 Ejemplos de Código</h2>
-            
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <!-- JavaScript -->
-                <div class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🟨 JavaScript</h3>
+                        <h3 class="card-title mb-4">
+                            <i data-lucide="link" class="w-6 h-6 text-primary"></i>
+                            Base URL
+                        </h3>
                         <div class="mockup-code bg-neutral text-neutral-content">
-                            <pre><code>const url = "/api/tts";
-const params = "?voice=es-MX-DaliaNeural&text=Hola mundo";
-
-fetch(url + params)
-  .then(res => res.blob())
-  .then(blob => {
-    const audio = new Audio(URL.createObjectURL(blob));
-    audio.play();
-  });</code></pre>
+                            <pre><code>https://microsoft-tts-api.vercel.app</code></pre>
                         </div>
                     </div>
                 </div>
-
-                <!-- Python -->
-                <div class="card bg-base-100 shadow-xl">
+                
+                <!-- TTS Endpoint -->
+                <div class="card bg-base-200">
                     <div class="card-body">
-                        <h3 class="card-title">🐍 Python</h3>
+                        <h3 class="card-title mb-4">
+                            <i data-lucide="mic" class="w-6 h-6 text-primary"></i>
+                            Text-to-Speech Endpoint
+                        </h3>
                         <div class="mockup-code bg-neutral text-neutral-content">
-                            <pre><code>import requests
+                            <pre><code>GET /api/tts?voice=VOICE_NAME&text=YOUR_TEXT</code></pre>
+                        </div>
+                        <div class="mt-4">
+                            <h4 class="font-bold mb-2">Parameters:</h4>
+                            <ul class="list-disc list-inside space-y-1">
+                                <li><code>voice</code> (required) - Voice identifier</li>
+                                <li><code>text</code> (required) - Text to convert</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Code Examples -->
+                <div class="card bg-base-200">
+                    <div class="card-body">
+                        <h3 class="card-title mb-4">
+                            <i data-lucide="code" class="w-6 h-6 text-primary"></i>
+                            Code Examples
+                        </h3>
+                        
+                        <div class="tabs tabs-boxed mb-4">
+                            <a class="tab tab-active" data-tab="javascript">JavaScript</a>
+                            <a class="tab" data-tab="python">Python</a>
+                            <a class="tab" data-tab="curl">cURL</a>
+                        </div>
+                        
+                        <div class="tab-content">
+                            <div class="tab-pane active" id="javascript">
+                                <div class="mockup-code bg-neutral text-neutral-content">
+                                    <pre><code>const response = await fetch('/api/tts?voice=en-US-JennyNeural&text=Hello world');
+const audioBlob = await response.blob();
+const audioUrl = URL.createObjectURL(audioBlob);
+const audio = new Audio(audioUrl);
+audio.play();</code></pre>
+                                </div>
+                            </div>
+                            <div class="tab-pane hidden" id="python">
+                                <div class="mockup-code bg-neutral text-neutral-content">
+                                    <pre><code>import requests
 
-url = "/api/tts"
+url = 'https://microsoft-tts-api.vercel.app/api/tts'
 params = {
-    "voice": "es-MX-DaliaNeural",
-    "text": "Hola mundo"
+    'voice': 'en-US-JennyNeural',
+    'text': 'Hello world'
 }
 
 response = requests.get(url, params=params)
-with open("audio.mp3", "wb") as f:
+with open('audio.mp3', 'wb') as f:
     f.write(response.content)</code></pre>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- cURL -->
-                <div class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🖥️ cURL</h3>
-                        <div class="mockup-code bg-neutral text-neutral-content">
-                            <pre><code>curl "/api/tts?voice=es-MX-DaliaNeural&text=Hola" -o audio.mp3</code></pre>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- PHP -->
-                <div class="card bg-base-100 shadow-xl">
-                    <div class="card-body">
-                        <h3 class="card-title">🐘 PHP</h3>
-                        <div class="mockup-code bg-neutral text-neutral-content">
-                            <pre><code>$url = "/api/tts";
-$params = "?voice=es-MX-DaliaNeural&text=Hola";
-
-file_put_contents("audio.mp3", 
-    file_get_contents($url . $params));</code></pre>
+                                </div>
+                            </div>
+                            <div class="tab-pane hidden" id="curl">
+                                <div class="mockup-code bg-neutral text-neutral-content">
+                                    <pre><code>curl "https://microsoft-tts-api.vercel.app/api/tts?voice=en-US-JennyNeural&text=Hello%20world" -o audio.mp3</code></pre>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section id="faq" class="py-16 bg-base-200">
+        <div class="container mx-auto px-4">
+            <h2 class="text-4xl font-bold text-center mb-4">Frequently Asked Questions</h2>
+            <p class="text-center text-lg text-base-content/70 mb-12 max-w-2xl mx-auto">
+                Common questions about the TTS API service
+            </p>
+            
+            <div class="max-w-4xl mx-auto space-y-4">
+                <div class="collapse collapse-arrow bg-base-100">
+                    <input type="radio" name="faq" />
+                    <div class="collapse-title text-xl font-medium">
+                        Is this service really free?
+                    </div>
+                    <div class="collapse-content">
+                        <p>Yes, the TTS API is completely free for both personal and commercial use. There are no hidden costs or usage limits.</p>
+                    </div>
+                </div>
+                
+                <div class="collapse collapse-arrow bg-base-100">
+                    <input type="radio" name="faq" />
+                    <div class="collapse-title text-xl font-medium">
+                        What audio quality do you provide?
+                    </div>
+                    <div class="collapse-content">
+                        <p>All audio is generated in high-quality MP3 format at 24kHz sampling rate, providing clear and natural-sounding speech.</p>
+                    </div>
+                </div>
+                
+                <div class="collapse collapse-arrow bg-base-100">
+                    <input type="radio" name="faq" />
+                    <div class="collapse-title text-xl font-medium">
+                        How many voices are available?
+                    </div>
+                    <div class="collapse-content">
+                        <p>We provide access to 400+ neural voices across 30+ languages and dialects. You can see the complete list using the /api/voices endpoint.</p>
+                    </div>
+                </div>
+                
+                <div class="collapse collapse-arrow bg-base-100">
+                    <input type="radio" name="faq" />
+                    <div class="collapse-title text-xl font-medium">
+                        Do I need an API key?
+                    </div>
+                    <div class="collapse-content">
+                        <p>No API key or registration is required. You can start using the API immediately with simple HTTP requests.</p>
+                    </div>
+                </div>
+                
+                <div class="collapse collapse-arrow bg-base-100">
+                    <input type="radio" name="faq" />
+                    <div class="collapse-title text-xl font-medium">
+                        What happens if a voice doesn't work?
+                    </div>
+                    <div class="collapse-content">
+                        <p>Some regional voices may have temporary availability issues. We recommend using the verified voices listed in the playground for guaranteed performance.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <!-- Footer -->
     <footer class="footer footer-center p-10 bg-base-300 text-base-content">
         <aside>
-            <p class="font-bold text-lg">Microsoft TTS API</p>
-            <p>Conversor de texto a voz gratuito usando Microsoft Edge TTS</p>
-            <p class="mt-2">Hecho con ❤️ para desarrolladores</p>
+            <div class="flex items-center justify-center mb-4">
+                <i data-lucide="volume-2" class="w-8 h-8 text-primary mr-2"></i>
+                <p class="text-xl font-bold">Microsoft TTS API</p>
+            </div>
+            <p>Professional text-to-speech conversion service</p>
+            <p class="mt-2">Free forever • No registration required • High quality audio</p>
         </aside>
     </footer>
 
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
     <script>
-        // Theme toggle
-        const themeToggle = document.querySelector('.theme-controller');
-        themeToggle.addEventListener('change', (e) => {
-            document.documentElement.setAttribute('data-theme', e.target.checked ? 'dark' : 'light');
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // Tab functionality
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs and panes
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('tab-active'));
+                document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+                
+                // Add active class to clicked tab
+                tab.classList.add('tab-active');
+                
+                // Show corresponding pane
+                const tabId = tab.getAttribute('data-tab');
+                document.getElementById(tabId).classList.remove('hidden');
+            });
         });
-
+        
+        // TTS Conversion
+        document.getElementById('convertBtn').addEventListener('click', async () => {
+            const voice = document.getElementById('voiceSelect').value;
+            const text = document.getElementById('textInput').value;
+            const convertBtn = document.getElementById('convertBtn');
+            const audioSection = document.getElementById('audioSection');
+            const errorAlert = document.getElementById('errorAlert');
+            
+            if (!text.trim()) {
+                showError('Please enter some text to convert');
+                return;
+            }
+            
+            // Show loading state
+            convertBtn.innerHTML = '<i data-lucide="loader" class="w-5 h-5 mr-2 animate-spin"></i>Converting...';
+            convertBtn.disabled = true;
+            errorAlert.classList.add('hidden');
+            
+            try {
+                const response = await fetch(`/api/tts?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(text)}`);
+                
+                if (response.ok) {
+                    const audioBlob = await response.blob();
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audioPlayer = document.getElementById('audioPlayer');
+                    const downloadBtn = document.getElementById('downloadBtn');
+                    
+                    audioPlayer.src = audioUrl;
+                    audioSection.classList.remove('hidden');
+                    
+                    // Set up download
+                    downloadBtn.href = audioUrl;
+                    downloadBtn.download = `tts-${voice}-${Date.now()}.mp3`;
+                    
+                } else {
+                    const errorData = await response.json();
+                    showError(errorData.message || 'Failed to convert text to speech');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                // Reset button
+                convertBtn.innerHTML = '<i data-lucide="volume-2" class="w-5 h-5 mr-2"></i>Convert to Speech';
+                convertBtn.disabled = false;
+                lucide.createIcons(); // Re-initialize icons
+            }
+        });
+        
+        function showError(message) {
+            const errorAlert = document.getElementById('errorAlert');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            errorMessage.textContent = message;
+            errorAlert.classList.remove('hidden');
+        }
+        
         // Smooth scroll for navigation
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
@@ -376,7 +506,18 @@ async def text_to_speech_api(voice: str = "", text: str = ""):
             content={
                 "status": False,
                 "status_code": 400,
-                "message": "Se requieren los parámetros voice y text"
+                "message": "Voice and text parameters are required"
+            },
+            status_code=400
+        )
+    
+    # Check if voice is in verified list
+    if voice not in VERIFIED_VOICES:
+        return JSONResponse(
+            content={
+                "status": False,
+                "status_code": 400,
+                "message": f"Voice '{voice}' is not available. Please use one of the verified voices."
             },
             status_code=400
         )
@@ -394,7 +535,7 @@ async def text_to_speech_api(voice: str = "", text: str = ""):
                 content={
                     "status": False,
                     "status_code": 400,
-                    "message": "No se pudo generar el audio"
+                    "message": "Failed to generate audio"
                 },
                 status_code=400
             )
@@ -414,7 +555,7 @@ async def text_to_speech_api(voice: str = "", text: str = ""):
             content={
                 "status": False,
                 "status_code": 400,
-                "message": f"Error al procesar la solicitud: {str(e)}"
+                "message": f"Error processing request: {str(e)}"
             },
             status_code=400
         )
@@ -439,6 +580,7 @@ async def list_voices_api():
                 "status": True,
                 "status_code": 200,
                 "total": len(formatted_voices),
+                "verified_voices": VERIFIED_VOICES,
                 "voices": formatted_voices
             }
         )
@@ -448,7 +590,7 @@ async def list_voices_api():
             content={
                 "status": False,
                 "status_code": 400,
-                "message": f"Error al obtener las voces: {str(e)}"
+                "message": f"Error fetching voices: {str(e)}"
             },
             status_code=400
         )
@@ -471,7 +613,7 @@ async def not_found_handler(request, exc):
         content={
             "status": False,
             "status_code": 404,
-            "message": "Endpoint no encontrado"
+            "message": "Endpoint not found"
         },
         status_code=404
     )
@@ -482,7 +624,7 @@ async def internal_error_handler(request, exc):
         content={
             "status": False,
             "status_code": 500,
-            "message": "Error interno del servidor"
+            "message": "Internal server error"
         },
         status_code=500
     )
